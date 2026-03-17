@@ -1,0 +1,225 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visor de Datos - Semilleros</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <style>
+        .text-resaltado { color: #0d6efd; font-weight: bold; }
+        .col-f { color: #d63384; font-weight: 500; }
+        .col-m { color: #0dcaf0; font-weight: 500; }
+        .header-visor { background-color: #212529; color: white; padding: 20px; border-radius: 8px 8px 0 0; }
+        .align-middle-custom { 
+            vertical-align: middle !important; 
+            background-color: #f8f9fa; 
+            font-size: 1.1rem; 
+            border-right: 2px solid #dee2e6 !important; 
+            font-weight: bold;
+        }
+        .fila-subtotal { background-color: #e9ecef; font-weight: bold; border-top: 2px solid #dee2e6; }
+        .fila-nacional { background-color: #212529 !important; color: #fff !important; font-size: 1.1rem; font-weight: bold; }
+        .fila-area-nacional { background-color: #f1f3f5; font-size: 0.9rem; border-top: 1px solid #dee2e6; }
+        .seccion-grados { background-color: #fff3cd; font-size: 0.85rem; border-top: 1px dashed #ffecb5; }
+        .seccion-grados-nacional { background-color: #343a40; color: #ffca28; font-size: 0.9rem; border-top: 1px solid #495057; }
+        .badge-grado { background-color: #ffca28; color: #000; padding: 2px 8px; border-radius: 4px; font-weight: bold; margin-right: 5px; }
+    </style>
+</head>
+<body class="bg-light">
+    <div class="container-fluid px-4 mt-5">
+        <div class="header-visor d-flex justify-content-between align-items-center shadow-sm">
+            <h2 class="mb-0"><i class="bi bi-bar-chart-steps"></i> Reporte Consolidado Nacional</h2>
+            <div>
+                <a href="/gestor_archivos" class="btn btn-warning me-2">
+                    <i class="bi bi-gear-fill"></i> Gestionar Cargas
+                </a>
+                <a href="/" class="btn btn-outline-light">
+                    <i class="bi bi-arrow-left-circle"></i> Ir a Registro
+                </a>
+            </div>
+        </div>
+
+        <div class="bg-white p-4 border border-top-0 rounded-bottom shadow-sm">
+            <div class="input-group mb-3 shadow-sm">
+                <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                <input type="text" id="busqueda" class="form-control" placeholder="Filtrar por estado o área científica..." onkeyup="filtrar()">
+            </div>
+            
+            <div class="table-responsive">
+                <table class="table table-bordered align-middle">
+                    <thead class="table-dark">
+                        <tr>
+                            <th style="width: 15%; text-align: center;">Estado</th>
+                            <th>Área Científica</th>
+                            <th class="text-center">Grupos</th>
+                            <th class="text-center">Femeninas</th>
+                            <th class="text-center">Masculinos</th>
+                            <th class="text-end">Total Jóvenes</th>
+                        </tr>
+                    </thead>
+                    <tbody id="cuerpo"></tbody>
+                    <tfoot id="pieTabla"></tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let datosOriginales = [];
+
+        function formatoVzla(numero) {
+            return new Intl.NumberFormat('de-DE').format(numero);
+        }
+
+        async function cargar() {
+            try {
+                const res = await fetch('/obtener_datos_bd');
+                datosOriginales = await res.json();
+                dibujar(datosOriginales);
+            } catch (err) {
+                console.error("Error:", err);
+            }
+        }
+
+        function dibujar(lista) {
+            const cuerpo = document.getElementById('cuerpo');
+            const pie = document.getElementById('pieTabla');
+            cuerpo.innerHTML = '';
+            pie.innerHTML = '';
+
+            let nacG = 0, nacF = 0, nacM = 0, nacT = 0;
+            let gradosNacional = { g1:0, g2:0, g3:0, g4:0, g5:0, g6:0 };
+            
+            // Objeto para acumular por área a nivel nacional
+            let totalesPorArea = {};
+
+            const consolidado = lista.reduce((acc, curr) => {
+                const est = curr.estado;
+                const area = curr.area.split('<')[0].trim();
+                
+                // Acumular para el total nacional por área
+                if (!totalesPorArea[area]) {
+                    totalesPorArea[area] = { grupos: 0, femeninas: 0, masculinos: 0, jovenes: 0 };
+                }
+                totalesPorArea[area].grupos += curr.grupos;
+                totalesPorArea[area].femeninas += curr.femeninas;
+                totalesPorArea[area].masculinos += curr.masculinos;
+                totalesPorArea[area].jovenes += curr.jovenes;
+
+                if (!acc[est]) acc[est] = {};
+                if (!acc[est][area]) {
+                    acc[est][area] = { ...curr, area: area };
+                } else {
+                    acc[est][area].grupos += curr.grupos;
+                    acc[est][area].femeninas += curr.femeninas;
+                    acc[est][area].masculinos += curr.masculinos;
+                    acc[est][area].jovenes += curr.jovenes;
+                    for (let i = 1; i <= 6; i++) acc[est][area][`g${i}`] = (acc[est][area][`g${i}`] || 0) + (curr[`g${i}`] || 0);
+                }
+                return acc;
+            }, {});
+
+            const estadosOrdenados = Object.keys(consolidado).sort();
+
+            estadosOrdenados.forEach(estado => {
+                const areasMap = consolidado[estado];
+                const areasKeys = Object.keys(areasMap).sort();
+                let subG = 0, subF = 0, subM = 0, subT = 0;
+                let gradosEstado = { g1:0, g2:0, g3:0, g4:0, g5:0, g6:0 };
+
+                const totalRowspan = areasKeys.length + 2;
+
+                areasKeys.forEach((areaNombre, index) => {
+                    const f = areasMap[areaNombre];
+                    subG += f.grupos; subF += f.femeninas; subM += f.masculinos; subT += f.jovenes;
+                    for (let i = 1; i <= 6; i++) {
+                        let val = (f[`g${i}`] || 0);
+                        gradosEstado[`g${i}`] += val;
+                        gradosNacional[`g${i}`] += val;
+                    }
+
+                    let filaHTML = `<tr>`;
+                    if (index === 0) filaHTML += `<td rowspan="${totalRowspan}" class="align-middle-custom text-center">${estado}</td>`;
+                    
+                    filaHTML += `
+                        <td>${areaNombre}</td>
+                        <td class="text-center">${f.grupos}</td>
+                        <td class="text-center col-f">${formatoVzla(f.femeninas)}</td>
+                        <td class="text-center col-m">${formatoVzla(f.masculinos)}</td>
+                        <td class="text-end text-resaltado">${formatoVzla(f.jovenes)}</td>
+                    </tr>`;
+                    cuerpo.innerHTML += filaHTML;
+                });
+
+                nacG += subG; nacF += subF; nacM += subM; nacT += subT;
+
+                cuerpo.innerHTML += `
+                    <tr class="fila-subtotal">
+                        <td class="text-end">SUBTOTAL ${estado}</td>
+                        <td class="text-center">${subG}</td>
+                        <td class="text-center col-f">${formatoVzla(subF)}</td>
+                        <td class="text-center col-m">${formatoVzla(subM)}</td>
+                        <td class="text-end text-dark">${formatoVzla(subT)}</td>
+                    </tr>`;
+
+                cuerpo.innerHTML += `
+                    <tr class="seccion-grados">
+                        <td colspan="5">
+                            <strong>Grados en ${estado}:</strong> 
+                            ${[1,2,3,4,5,6].map(i => `<span class="ms-3"><span class="badge-grado">${i}°</span> ${formatoVzla(gradosEstado['g'+i])}</span>`).join('')}
+                        </td>
+                    </tr>`;
+            });
+
+            if (lista.length > 0) {
+                // 1. Encabezado de Totales por Área
+                let htmlPie = `<tr class="table-dark"><td colspan="6" class="text-center py-2"><strong>TOTALES NACIONALES POR ÁREA CIENTÍFICA</strong></td></tr>`;
+                
+                // 2. Filas de cada Área a nivel nacional
+                Object.keys(totalesPorArea).sort().forEach(area => {
+                    const d = totalesPorArea[area];
+                    htmlPie += `
+                        <tr class="fila-area-nacional">
+                            <td colspan="2" class="ps-4"><strong>${area}</strong></td>
+                            <td class="text-center">${d.grupos}</td>
+                            <td class="text-center col-f">${formatoVzla(d.femeninas)}</td>
+                            <td class="text-center col-m">${formatoVzla(d.masculinos)}</td>
+                            <td class="text-end fw-bold">${formatoVzla(d.jovenes)}</td>
+                        </tr>`;
+                });
+
+                // 3. Fila Gran Total Nacional
+                htmlPie += `
+                    <tr class="fila-nacional">
+                        <td colspan="2" class="text-center text-warning">GRAN TOTAL NACIONAL</td>
+                        <td class="text-center">${formatoVzla(nacG)}</td>
+                        <td class="text-center" style="color: #ff85c0;">${formatoVzla(nacF)}</td>
+                        <td class="text-center" style="color: #69edff;">${formatoVzla(nacM)}</td>
+                        <td class="text-end text-warning">${formatoVzla(nacT)}</td>
+                    </tr>
+                    <tr class="seccion-grados-nacional">
+                        <td colspan="6" class="text-center py-3">
+                            <i class="bi bi-bar-chart-fill me-2"></i> <strong>CONSOLIDADO NACIONAL POR GRADOS:</strong>
+                            ${[1,2,3,4,5,6].map(i => `<span class="mx-3"><span class="badge-grado">${i}°</span> ${formatoVzla(gradosNacional['g'+i])}</span>`).join('')}
+                        </td>
+                    </tr>`;
+                
+                pie.innerHTML = htmlPie;
+            } else {
+                cuerpo.innerHTML = '<tr><td colspan="6" class="text-center py-4">No hay datos registrados</td></tr>';
+            }
+        }
+
+        function filtrar() {
+            const b = document.getElementById('busqueda').value.toUpperCase();
+            const filtrados = datosOriginales.filter(f => 
+                f.estado.toUpperCase().includes(b) || f.area.toUpperCase().includes(b)
+            );
+            dibujar(filtrados);
+        }
+
+        window.onload = cargar;
+    </script>
+</body>
+</html>

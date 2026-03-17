@@ -1,0 +1,89 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Gestor de Archivos - Semilleros</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <style>
+        .header-gestor { background-color: #dc3545; color: white; padding: 20px; border-radius: 8px 8px 0 0; }
+        .btn-eliminar { color: #dc3545; cursor: pointer; transition: 0.3s; }
+        .btn-eliminar:hover { color: #a71d2a; transform: scale(1.1); }
+    </style>
+</head>
+<body class="bg-light">
+    <div class="container mt-5">
+        <div class="header-gestor d-flex justify-content-between align-items-center shadow-sm">
+            <h2 class="mb-0"><i class="bi bi-folder-x"></i> Gestión de Cargas por Estado</h2>
+            <a href="/visor" class="btn btn-outline-light">Volver al Visor</a>
+        </div>
+        
+        <div class="bg-white p-4 border border-top-0 rounded-bottom shadow-sm">
+            <p class="text-muted">Aquí puedes visualizar las áreas cargadas y eliminar aquellas que contengan errores.</p>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead class="table-secondary">
+                        <tr>
+                            <th>Estado</th>
+                            <th>Área Científica</th>
+                            <th class="text-center">Total Jóvenes</th>
+                            <th class="text-center">Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody id="lista-archivos">
+                        </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function cargarRegistros() {
+            const res = await fetch('/obtener_datos_bd');
+            const datos = await res.json();
+            const cuerpo = document.getElementById('lista-archivos');
+            cuerpo.innerHTML = '';
+
+            if (datos.length === 0) {
+                cuerpo.innerHTML = '<tr><td colspan="4" class="text-center">No hay registros en la base de datos.</td></tr>';
+                return;
+            }
+
+            datos.forEach(reg => {
+                cuerpo.innerHTML += `
+                    <tr>
+                        <td><strong>${reg.estado}</strong></td>
+                        <td>${reg.area}</td>
+                        <td class="text-center">${reg.jovenes}</td>
+                        <td class="text-center">
+                            <button class="btn btn-link btn-eliminar" onclick="eliminar('${reg.estado}', '${reg.area}')">
+                                <i class="bi bi-trash3-fill"></i> Eliminar
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        async function eliminar(estado, area) {
+            if (!confirm(`¿Estás seguro de eliminar el registro de ${area} en ${estado}?`)) return;
+
+            const res = await fetch('/eliminar_registro', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({estado, area})
+            });
+
+            const result = await res.json();
+            if (result.status === 'success') {
+                alert(result.message);
+                cargarRegistros();
+            } else {
+                alert("Error: " + result.message);
+            }
+        }
+
+        window.onload = cargarRegistros;
+    </script>
+</body>
+</html>
